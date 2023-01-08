@@ -15,6 +15,8 @@ import time
 from operator import add
 from scipy import sparse
 import nt_tools
+import json
+import os
 
 
 class Mesh:
@@ -41,9 +43,10 @@ class Mesh:
                     face = [n1, n2, n3]
                     self.faces.append(face)
             self.points = np.array(self.points)
-            self.points = self.points.T
+            self.points = self.points
             self.faces = np.array(self.faces)
             self.faces = self.faces.T
+            self.labels = self.extract_labels(filename)
 
             self.failed = False
         else:
@@ -60,8 +63,8 @@ class Mesh:
         self.cog = np.sum(self.points, axis=1)/self.nb_pts()
 
         # Printing informations
-        #print ("mesh is ", filename)
-        #print ("loaded mesh has ", self.nb_pts(), " vertices and ", self.nb_edges(), " edges.")
+        print ("mesh is ", filename)
+        print ("loaded mesh has ", self.nb_pts(), " vertices and ", self.nb_edges(), " edges.")
 
     def save(self, filename):
         f = open(filename, 'w')
@@ -87,8 +90,24 @@ class Mesh:
         
         else:
             print ("couldn't save mesh ", self.name)
-            self.failed_save = True
+            self.failed_save = True      
+            
+    def extract_labels(self, filename):
+        json_path = get_json(filename)
+        return labels_from_json(json_path)
+        
+                  
+    def barycentric_to_cartesian(self, key):
+        if isinstance(self.labels[key][0],list):
+            coord = self.labels[key]
+            return coord[0][1] * self.points[coord[0][0]] + coord[1][1] * self.points[coord[1][0]] + coord[2][1] * self.points[coord[2][0]]
+        
+    def change_coord(self):
+        for key in self.labels.keys():
+            print(key)
+            self.labels[key] = self.barycentric_to_cartesian(key)
 
+        
     def compute_PC (self):
         # this functions computes the coordinates of the centered mesh
         # rotated along its principal components
@@ -215,6 +234,37 @@ class Mesh:
 
 
 
+def all_the_values(dictionary):
+    for keys , values in dictionary.items():
+        if isinstance(values, dict):
+            for x in all_the_values(values):
+                yield x
+        else:
+            yield (keys,values)
+            
+            
+def labels_from_json(json_path):
+    dic_labels = {}
+    with open(json_path) as json_file:
+         dic = json.load(json_file)
+    for label in all_the_values(dic):
+        if isinstance(label[1],list):
+            dic_labels[label[0]]=label[1]
+    return dic_labels
+
+
+def get_json(mesh_path):
+    json_dir=os.path.join(os.path.dirname(mesh_path),'appData')
+    jsons = os.listdir(json_dir)
+    if ('left' in mesh_path) and ('patient_left.json' in jsons):
+        return os.path.join(json_dir,'patient_left.json')
+    if ('right' in mesh_path) and ('patient_right.json' in jsons):
+        return os.path.join(json_dir,'patient_right.json')
+    if 'patient.json' in jsons:
+        return os.path.join(json_dir,'patient.json')
+    raise ValueError('json file not found')
+
+
 
 
 class Grid:
@@ -323,6 +373,7 @@ class Grid:
         :return: the points registered inside the cube.
         '''
         return self.grid[cube[0]][cube[1]][cube[2]]
+
 
 
 
